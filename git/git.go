@@ -1,6 +1,9 @@
 package git
 
-import "os/exec"
+import (
+	"fmt"
+	"os/exec"
+)
 
 func IsGitDirectory(path string) bool {
 	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
@@ -22,9 +25,11 @@ func GetStagedDiff(path string) (string, error) {
 }
 
 func CreateCommitMessage(message string) error {
+	// Combine stdout and stderr to capture all output from the command
 	cmd := exec.Command("git", "commit", "-m", message)
-	if err := cmd.Run(); err != nil {
-		return err
+	out, err := cmd.CombinedOutput() // Captures both output and errors
+	if err != nil {
+		return fmt.Errorf("error creating commit message: %w, output: %s", err, string(out))
 	}
 	return nil
 }
