@@ -15,6 +15,7 @@ var rootCmd = &cobra.Command{
 	Long: `Gritty helps developers generate Git commit messages based on staged changes 
 in a Git repository using AI models. If no configuration is found, you will be 
 prompted to initialize it.`,
+	RunE: runCommitCmd, // call commit command by default when no subcommand is provided
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Use == "init" {
 			return nil
