@@ -63,9 +63,18 @@ func runCommitCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error getting commit messages: %w", err)
 	}
 
+	uniqueMessages := make(map[string]struct{})
+	var filteredMessages []string // slice is used to maintain the order of messages
+	for _, msg := range commitMessages {
+		if _, ok := uniqueMessages[msg]; !ok {
+			uniqueMessages[msg] = struct{}{}
+			filteredMessages = append(filteredMessages, msg)
+		}
+	}
+
 	// Display the commit messages with options and separators
 	fmt.Println("Suggested commit messages:")
-	for i, msg := range commitMessages {
+	for i, msg := range filteredMessages {
 		fmt.Printf("\nOption %d:\n%s\n", i+1, msg)
 		fmt.Println("-----") // Separator line
 	}
@@ -98,13 +107,13 @@ func runCommitCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate selection
-	if selection < 1 || selection > len(commitMessages) {
+	if selection < 1 || selection > len(filteredMessages) {
 		fmt.Println("Invalid selection. Operation cancelled.")
 		return nil
 	}
 
 	// Get the selected commit message
-	selectedMessage := commitMessages[selection-1]
+	selectedMessage := filteredMessages[selection-1]
 
 	// Use the selected commit message to create the commit
 	if err := git.CreateCommitMessage(selectedMessage); err != nil {
