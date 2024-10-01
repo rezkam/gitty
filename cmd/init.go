@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
-	"github.com/manifoldco/promptui"
 	"github.com/rezkam/gritty/provider"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -42,15 +44,32 @@ func runInitCmd(cmd *cobra.Command, args []string) error {
 		providerNames = append(providerNames, p.Name)
 	}
 
+	// Display the available providers
+	fmt.Println("Select a commit message provider:")
+	for i, name := range providerNames {
+		fmt.Printf("%d: %s\n", i+1, name)
+	}
+
 	// Prompt user to select a provider
-	providerPrompt := promptui.Select{
-		Label: "Select a commit message provider",
-		Items: providerNames,
-	}
-	_, selectedProvider, err := providerPrompt.Run()
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter the number corresponding to your choice: ")
+
+	selectionStr, err := reader.ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("error selecting provider: %w", err)
+		return fmt.Errorf("error reading input: %w", err)
 	}
+
+	// Remove any newline or extra spaces from the input
+	selectionStr = strings.TrimSpace(selectionStr)
+
+	// Convert the selection to an integer
+	selection, err := strconv.Atoi(selectionStr)
+	if err != nil || selection < 1 || selection > len(providerNames) {
+		return fmt.Errorf("invalid selection, please enter a number between 1 and %d", len(providerNames))
+	}
+
+	// Get the selected provider
+	selectedProvider := providerNames[selection-1]
 
 	// Get the selected provider's ConfigSetter
 	selectedProviderConfigSetter, err := provider.GetConfigSetter(selectedProvider)
