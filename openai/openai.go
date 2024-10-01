@@ -89,7 +89,7 @@ type message struct {
 	Content string `json:"content"`
 }
 
-func (p *Provider) GetCommitMessage(diff string) (string, error) {
+func (p *Provider) GetCommitMessages(diff string, n int) ([]string, error) {
 	reqPayload := map[string]interface{}{
 		"model": model,
 		"messages": []map[string]string{
@@ -97,17 +97,18 @@ func (p *Provider) GetCommitMessage(diff string) (string, error) {
 			{"role": "user", "content": fmt.Sprintf("Based on the following git diff, suggest a concise and clear git commit message:\n\n%s", diff)},
 		},
 		"max_tokens": maxTokens,
+		"n":          n,
 	}
 
 	var body bytes.Buffer
 	err := json.NewEncoder(&body).Encode(reqPayload)
 	if err != nil {
-		return "", fmt.Errorf("failed to encode request payload: %w", err)
+		return nil, fmt.Errorf("failed to encode request payload: %w", err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, url, &body)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", p.cfg.APIKey))
@@ -118,26 +119,29 @@ func (p *Provider) GetCommitMessage(diff string) (string, error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("api request failed with status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("api request failed with status code: %d", resp.StatusCode)
 	}
 
 	var respPayload response
 	err = json.NewDecoder(resp.Body).Decode(&respPayload)
 	if err != nil {
-		return "", fmt.Errorf("failed to decode response payload: %w", err)
+		return nil, fmt.Errorf("failed to decode response payload: %w", err)
 	}
 
 	// Extract the commit message from the response
 	if len(respPayload.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
+		return nil, fmt.Errorf("no choices in response")
 	}
 
-	commitMessage := respPayload.Choices[0].Message.Content
+	var commitMessages []string
+	for _, choice := range respPayload.Choices {
+		commitMessages = append(commitMessages, choice.Message.Content)
+	}
 
-	return commitMessage, nil
+	return commitMessages, nil
 }

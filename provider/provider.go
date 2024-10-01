@@ -8,7 +8,7 @@ import (
 
 // Provider is the interface for commit message providers.
 type Provider interface {
-	GetCommitMessage(diff string) (string, error)
+	GetCommitMessages(diff string, n int) ([]string, error)
 }
 
 // ProviderDefinition holds information about a provider.
