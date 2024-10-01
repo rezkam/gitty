@@ -63,10 +63,11 @@ func runCommitCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error getting commit messages: %w", err)
 	}
 
-	// Display the commit messages with options
+	// Display the commit messages with options and separators
 	fmt.Println("Suggested commit messages:")
 	for i, msg := range commitMessages {
-		fmt.Printf("%d: %s\n", i+1, msg)
+		fmt.Printf("\nOption %d:\n%s\n", i+1, msg)
+		fmt.Println("-----") // Separator line
 	}
 
 	// Prompt the user to select one
