@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/rezkam/gritty/git"
 	"github.com/rezkam/gritty/provider"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 var commitCmd = &cobra.Command{
@@ -55,27 +57,59 @@ func runCommitCmd(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Use the commit message provider to get a commit message
-	commitMessage, err := p.GetCommitMessage(diff)
+	// Use the commit message provider to get commit messages
+	commitMessages, err := p.GetCommitMessages(diff, 3)
 	if err != nil {
-		return fmt.Errorf("error getting commit message: %w", err)
+		return fmt.Errorf("error getting commit messages: %w", err)
 	}
-	fmt.Println("Suggested commit message:", commitMessage)
 
-	var confirm string
-	fmt.Println("Do you want to use this commit message? (y/n):")
-	_, err = fmt.Scanln(&confirm)
+	// Display the commit messages with options
+	fmt.Println("Suggested commit messages:")
+	for i, msg := range commitMessages {
+		fmt.Printf("%d: %s\n", i+1, msg)
+	}
+
+	// Prompt the user to select one
+	fmt.Println("Please select a commit message by number (or press Enter to cancel):")
+	var input string
+	_, err = fmt.Scanln(&input)
 	if err != nil {
+		if err.Error() == "unexpected newline" {
+			// User pressed Enter without typing anything, cancel
+			fmt.Println("No commit message selected. Operation cancelled.")
+			return nil
+		}
 		return fmt.Errorf("error reading input: %w", err)
 	}
-	confirm = strings.TrimSpace(confirm)
 
-	if strings.ToLower(confirm) == "y" {
-		if err := git.CreateCommitMessage(commitMessage); err != nil {
-			return fmt.Errorf("error creating commit message: %w", err)
-		}
-		fmt.Println("Commit created successfully")
+	input = strings.TrimSpace(input)
+	if input == "" {
+		// User pressed Enter without typing anything, cancel
+		fmt.Println("No commit message selected. Operation cancelled.")
+		return nil
 	}
+
+	// Convert input to integer
+	selection, err := strconv.Atoi(input)
+	if err != nil {
+		fmt.Println("Invalid selection. Operation cancelled.")
+		return nil
+	}
+
+	// Validate selection
+	if selection < 1 || selection > len(commitMessages) {
+		fmt.Println("Invalid selection. Operation cancelled.")
+		return nil
+	}
+
+	// Get the selected commit message
+	selectedMessage := commitMessages[selection-1]
+
+	// Use the selected commit message to create the commit
+	if err := git.CreateCommitMessage(selectedMessage); err != nil {
+		return fmt.Errorf("error creating commit message: %w", err)
+	}
+	fmt.Println("Commit created successfully")
 
 	return nil
 }
