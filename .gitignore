@@ -45,3 +45,4 @@ specs/
 
 # AI agents files
 .claude/
+.github/prompts/
