@@ -3,7 +3,6 @@ package openai_test
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"github.com/rezkam/gritty/provider"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestGetCommitMessagesSuccess(t *testing.T) {
@@ -34,6 +34,7 @@ func TestGetCommitMessagesSuccess(t *testing.T) {
 			"choices": []map[string]any{
 				{"message": map[string]string{"content": "Add multi-provider support"}},
 				{"message": map[string]string{"content": "Add multi-provider support"}},
+				{"message": map[string]string{"content": "Add multi-provider support"}},
 				{"message": map[string]string{"content": "Integrate Claude provider"}},
 			},
 		}
@@ -41,15 +42,13 @@ func TestGetCommitMessagesSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := newProviderFromYAML(t, fmt.Sprintf(`
-provider: openai
-config:
-  apiKey: test-key
-  endpoint: %q
-  model: gpt-4o-mini
-  maxTokens: 150
-  timeout: 2
-`, server.URL))
+	p := newProvider(t, openai.Config{
+		APIKey:    "test-key",
+		Endpoint:  server.URL,
+		Model:     "gpt-4o-mini",
+		MaxTokens: 150,
+		Timeout:   1,
+	})
 
 	messages, err := p.GetCommitMessages("diff", 2)
 	require.NoError(t, err)
@@ -71,12 +70,10 @@ func TestGetCommitMessagesAuthenticationError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := newProviderFromYAML(t, fmt.Sprintf(`
-provider: openai
-config:
-  apiKey: bad-key
-  endpoint: %q
-`, server.URL))
+	p := newProvider(t, openai.Config{
+		APIKey:   "bad-key",
+		Endpoint: server.URL,
+	})
 
 	_, err := p.GetCommitMessages("diff", 1)
 	var authErr *provider.AuthenticationError
@@ -93,12 +90,10 @@ func TestGetCommitMessagesRateLimitError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := newProviderFromYAML(t, fmt.Sprintf(`
-provider: openai
-config:
-  apiKey: test-key
-  endpoint: %q
-`, server.URL))
+	p := newProvider(t, openai.Config{
+		APIKey:   "test-key",
+		Endpoint: server.URL,
+	})
 
 	_, err := p.GetCommitMessages("diff", 1)
 	var rateErr *provider.RateLimitError
@@ -115,12 +110,10 @@ func TestGetCommitMessagesValidationError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := newProviderFromYAML(t, fmt.Sprintf(`
-provider: openai
-config:
-  apiKey: test-key
-  endpoint: %q
-`, server.URL))
+	p := newProvider(t, openai.Config{
+		APIKey:   "test-key",
+		Endpoint: server.URL,
+	})
 
 	_, err := p.GetCommitMessages("diff", 1)
 	var validationErr *provider.ValidationError
@@ -141,13 +134,11 @@ func TestGetCommitMessagesTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := newProviderFromYAML(t, fmt.Sprintf(`
-provider: openai
-config:
-  apiKey: test-key
-  endpoint: %q
-  timeout: 1
-`, server.URL))
+	p := newProvider(t, openai.Config{
+		APIKey:   "test-key",
+		Endpoint: server.URL,
+		Timeout:  1,
+	})
 
 	_, err := p.GetCommitMessages("diff", 1)
 	var networkErr *provider.NetworkError
@@ -155,17 +146,61 @@ config:
 	require.True(t, errors.Is(err, networkErr.Err))
 }
 
-func newProviderFromYAML(t *testing.T, yaml string) *openai.Provider {
+func TestGetCommitMessages_ReturnNUnduplicatedFirstChoicesInOrder(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": "1"}},
+				{"message": map[string]string{"content": "1"}},
+				{"message": map[string]string{"content": "2"}},
+				{"message": map[string]string{"content": "3"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := newProvider(t, openai.Config{
+		APIKey:   "test-key",
+		Endpoint: server.URL,
+		Timeout:  1,
+	})
+
+	messages, err := p.GetCommitMessages("diff", 2)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"1",
+		"2",
+	}, messages)
+	require.True(t, p.SupportsMultipleCompletions())
+}
+
+func newProvider(t *testing.T, cfg openai.Config) *openai.Provider {
 	t.Helper()
 
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
+	payload := struct {
+		Provider string        `yaml:"provider"`
+		Config   openai.Config `yaml:"config"`
+	}{
+		Provider: "openai",
+		Config:   cfg,
+	}
+
+	data, err := yaml.Marshal(payload)
+	require.NoError(t, err)
+
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-	require.NoError(t, os.WriteFile(configPath, []byte(yaml), 0600))
+	require.NoError(t, os.WriteFile(configPath, data, 0600))
 
-	provider, err := openai.NewProvider(configPath)
+	p, err := openai.NewProvider(configPath)
 	require.NoError(t, err)
-	return provider
+	return p
 }
