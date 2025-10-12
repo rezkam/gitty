@@ -37,7 +37,7 @@ func runInitCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	availableProviders := provider.AvailableProviders
+	availableProviders := provider.AvailableProviders()
 
 	providerNames := make([]string, 0, len(availableProviders))
 	for _, p := range availableProviders {

@@ -1,0 +1,48 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go build artifacts
+gritty
+vendor/
+dist/
+build/
+
+# Go test coverage
+*.cover
+coverage.txt
+coverage.html
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and config (keep templates, ignore actual configs with secrets)
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.log
+*.pid
+
+# OS generated files
+Thumbs.db
+
+# Specify agent context files
+.specify/
+specs/
+
+# AI agents files
+.claude/
+.github/prompts/
