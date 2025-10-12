@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/rezkam/gritty/cmd"
+	_ "github.com/rezkam/gritty/openai"
 )
 
 func main() {

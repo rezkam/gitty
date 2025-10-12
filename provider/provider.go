@@ -1,54 +1,40 @@
 package provider
 
 import (
-	"fmt"
+	"sort"
 
-	"github.com/rezkam/gritty/openai"
+	"github.com/rezkam/gritty/provider/core"
+	// Ensure built-in providers register themselves.
+	_ "github.com/rezkam/gritty/openai"
 )
 
-// Provider is the interface for commit message providers.
-type Provider interface {
-	GetCommitMessages(diff string, n int) ([]string, error)
+type (
+	Provider           = core.Provider
+	ProviderDefinition = core.ProviderDefinition
+	ConfigSetter       = core.ConfigSetter
+	Factory            = core.Factory
+)
+
+// Register adds a provider definition to the available provider list.
+func Register(def ProviderDefinition) {
+	core.Register(def)
 }
 
-// ProviderDefinition holds information about a provider.
-type ProviderDefinition struct {
-	Name         string
-	Factory      Factory
-	ConfigSetter ConfigSetter
+// AvailableProviders returns the registered provider definitions sorted by name.
+func AvailableProviders() []ProviderDefinition {
+	providers := core.Providers()
+	sort.Slice(providers, func(i, j int) bool {
+		return providers[i].Name < providers[j].Name
+	})
+	return providers
 }
 
-var AvailableProviders = []ProviderDefinition{
-	{
-		Name: "openai",
-		Factory: func(configPath string) (Provider, error) {
-			return openai.NewProvider(configPath)
-		},
-		ConfigSetter: &openai.Config{},
-	},
-}
-
-// ConfigSetter represents a type that can prompt for configuration.
-type ConfigSetter interface {
-	Configure() (any, error)
-}
-
+// GetConfigSetter retrieves the config setter registered for the provider name.
 func GetConfigSetter(providerName string) (ConfigSetter, error) {
-	for _, provider := range AvailableProviders {
-		if provider.Name == providerName {
-			return provider.ConfigSetter, nil
-		}
-	}
-	return nil, fmt.Errorf("provider '%s' not found", providerName)
+	return core.GetConfigSetter(providerName)
 }
 
-type Factory func(configPath string) (Provider, error)
-
+// GetFactory retrieves the factory registered for the provider name.
 func GetFactory(providerName string) (Factory, error) {
-	for _, provider := range AvailableProviders {
-		if provider.Name == providerName {
-			return provider.Factory, nil
-		}
-	}
-	return nil, fmt.Errorf("provider '%s' not found", providerName)
+	return core.GetFactory(providerName)
 }
