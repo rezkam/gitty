@@ -12,12 +12,12 @@ import (
 
 	"github.com/rezkam/gritty/openai"
 	"github.com/rezkam/gritty/provider"
-	"github.com/spf13/viper"
+	providercore "github.com/rezkam/gritty/provider/core"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
-func TestGetCommitMessagesSuccess(t *testing.T) {
+func TestGenerateMessagesSuccess(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,16 +50,16 @@ func TestGetCommitMessagesSuccess(t *testing.T) {
 		Timeout:   1,
 	})
 
-	messages, err := p.GetCommitMessages("diff", 2)
+	resp, err := p.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 2})
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		"Add multi-provider support",
 		"Integrate Claude provider",
-	}, messages)
+	}, resp.Messages())
 	require.True(t, p.SupportsMultipleCompletions())
 }
 
-func TestGetCommitMessagesAuthenticationError(t *testing.T) {
+func TestGenerateMessagesAuthenticationError(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,17 +71,20 @@ func TestGetCommitMessagesAuthenticationError(t *testing.T) {
 	defer server.Close()
 
 	p := newProvider(t, openai.Config{
-		APIKey:   "bad-key",
-		Endpoint: server.URL,
+		APIKey:    "bad-key",
+		Endpoint:  server.URL,
+		Model:     "gpt-4o-mini",
+		MaxTokens: 150,
+		Timeout:   1,
 	})
 
-	_, err := p.GetCommitMessages("diff", 1)
+	_, err := p.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 1})
 	var authErr *provider.AuthenticationError
 	require.ErrorAs(t, err, &authErr)
 	require.Equal(t, "openai", authErr.Provider)
 }
 
-func TestGetCommitMessagesRateLimitError(t *testing.T) {
+func TestGenerateMessagesRateLimitError(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,17 +94,20 @@ func TestGetCommitMessagesRateLimitError(t *testing.T) {
 	defer server.Close()
 
 	p := newProvider(t, openai.Config{
-		APIKey:   "test-key",
-		Endpoint: server.URL,
+		APIKey:    "test-key",
+		Endpoint:  server.URL,
+		Model:     "gpt-4o-mini",
+		MaxTokens: 150,
+		Timeout:   1,
 	})
 
-	_, err := p.GetCommitMessages("diff", 1)
+	_, err := p.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 1})
 	var rateErr *provider.RateLimitError
 	require.ErrorAs(t, err, &rateErr)
 	require.Equal(t, 60, rateErr.RetryAfter)
 }
 
-func TestGetCommitMessagesValidationError(t *testing.T) {
+func TestGenerateMessagesValidationError(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -111,16 +117,19 @@ func TestGetCommitMessagesValidationError(t *testing.T) {
 	defer server.Close()
 
 	p := newProvider(t, openai.Config{
-		APIKey:   "test-key",
-		Endpoint: server.URL,
+		APIKey:    "test-key",
+		Endpoint:  server.URL,
+		Model:     "gpt-4o-mini",
+		MaxTokens: 150,
+		Timeout:   1,
 	})
 
-	_, err := p.GetCommitMessages("diff", 1)
+	_, err := p.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 1})
 	var validationErr *provider.ValidationError
 	require.ErrorAs(t, err, &validationErr)
 }
 
-func TestGetCommitMessagesTimeout(t *testing.T) {
+func TestGenerateMessagesTimeout(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -135,18 +144,20 @@ func TestGetCommitMessagesTimeout(t *testing.T) {
 	defer server.Close()
 
 	p := newProvider(t, openai.Config{
-		APIKey:   "test-key",
-		Endpoint: server.URL,
-		Timeout:  1,
+		APIKey:    "test-key",
+		Endpoint:  server.URL,
+		Model:     "gpt-4o-mini",
+		MaxTokens: 150,
+		Timeout:   1,
 	})
 
-	_, err := p.GetCommitMessages("diff", 1)
+	_, err := p.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 1})
 	var networkErr *provider.NetworkError
 	require.ErrorAs(t, err, &networkErr)
 	require.True(t, errors.Is(err, networkErr.Err))
 }
 
-func TestGetCommitMessages_ReturnNUnduplicatedFirstChoicesInOrder(t *testing.T) {
+func TestGenerateMessagesReturnsFirstNChoices(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,27 +174,33 @@ func TestGetCommitMessages_ReturnNUnduplicatedFirstChoicesInOrder(t *testing.T) 
 	defer server.Close()
 
 	p := newProvider(t, openai.Config{
-		APIKey:   "test-key",
-		Endpoint: server.URL,
-		Timeout:  1,
+		APIKey:    "test-key",
+		Endpoint:  server.URL,
+		Model:     "gpt-4o-mini",
+		MaxTokens: 150,
+		Timeout:   1,
 	})
 
-	messages, err := p.GetCommitMessages("diff", 2)
+	resp, err := p.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 2})
 	require.NoError(t, err)
 
-	require.NoError(t, err)
 	require.Equal(t, []string{
 		"1",
 		"2",
-	}, messages)
+	}, resp.Messages())
 	require.True(t, p.SupportsMultipleCompletions())
 }
 
 func newProvider(t *testing.T, cfg openai.Config) *openai.Provider {
 	t.Helper()
 
-	viper.Reset()
-	t.Cleanup(viper.Reset)
+	// Set default prompts inline for testing (simpler than creating files)
+	if cfg.SystemPrompt == "" {
+		cfg.SystemPrompt = "You are an OpenAI assistant that writes Git commit summaries. Output the commit message on the first line in imperative mood, no longer than 72 characters."
+	}
+	if cfg.CommitUserPrompt == "" {
+		cfg.CommitUserPrompt = "Generate a Git commit summary for the staged changes.\n\nDiff:\n{{ .Diff }}"
+	}
 
 	payload := struct {
 		Provider string        `yaml:"provider"`

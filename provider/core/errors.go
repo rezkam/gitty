@@ -63,7 +63,7 @@ func (e *ValidationError) Unwrap() error {
 	return e.Err
 }
 
-// RateLimitError indicates provider API rate limit exceeded.
+// RateLimitError indicates the provider API rate limit exceeded.
 type RateLimitError struct {
 	Provider   string
 	RetryAfter int

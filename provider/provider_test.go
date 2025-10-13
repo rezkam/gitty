@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	providercore "github.com/rezkam/gritty/provider/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,13 +17,13 @@ func TestMockProviderSupportsMultipleCompletions(t *testing.T) {
 		Capability: true,
 	}
 
-	msgs, err := mock.GetCommitMessages("diff", 2)
+	resp, err := mock.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 2})
 	require.NoError(t, err)
-	require.Equal(t, []string{"one", "two"}, msgs)
+	require.Equal(t, []string{"one", "two"}, resp.Messages())
 	require.True(t, mock.SupportsMultipleCompletions())
 	require.Equal(t, 1, mock.CallCount)
 	require.Equal(t, "diff", mock.LastRequest.Diff)
-	require.Equal(t, 2, mock.LastRequest.N)
+	require.Equal(t, 2, mock.LastRequest.Count)
 }
 
 func TestMockProviderRespectsRequestedCount(t *testing.T) {
@@ -32,12 +33,12 @@ func TestMockProviderRespectsRequestedCount(t *testing.T) {
 		Messages: []string{"one"},
 	}
 
-	msgs, err := mock.GetCommitMessages("diff", 5)
+	resp, err := mock.GenerateMessages(providercore.CommitRequest{Diff: "diff", Count: 5})
 	require.NoError(t, err)
-	require.Equal(t, []string{"one"}, msgs)
+	require.Equal(t, []string{"one"}, resp.Messages())
 	require.False(t, mock.SupportsMultipleCompletions())
 	require.Equal(t, 1, mock.CallCount)
-	require.Equal(t, 1, mock.LastRequest.N)
+	require.Equal(t, 1, mock.LastRequest.Count)
 }
 
 func TestGetFactoryReturnsRegisteredProvider(t *testing.T) {
@@ -90,12 +91,12 @@ func TestNetworkErrorIncludesEndpoint(t *testing.T) {
 
 	underlying := errors.New("dial tcp 127.0.0.1: connection refused")
 	err := &NetworkError{
-		Provider: "localllm",
+		Provider: "openai",
 		Endpoint: "http://localhost:1234",
 		Err:      underlying,
 	}
 
-	require.EqualError(t, err, fmt.Sprintf("provider 'localllm' network error (%s): %v", err.Endpoint, underlying))
+	require.EqualError(t, err, fmt.Sprintf("provider 'openai' network error (%s): %v", err.Endpoint, underlying))
 	require.ErrorIs(t, err, underlying)
 }
 

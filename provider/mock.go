@@ -1,5 +1,9 @@
 package provider
 
+import (
+	providercore "github.com/rezkam/gritty/provider/core"
+)
+
 // MockProvider implements Provider for tests and CLI scenarios without
 // performing network calls.
 type MockProvider struct {
@@ -7,28 +11,27 @@ type MockProvider struct {
 	Err         error
 	Capability  bool
 	CallCount   int
-	LastRequest struct {
-		Diff string
-		N    int
-	}
+	LastRequest providercore.CommitRequest
 }
 
-// GetCommitMessages returns the pre-seeded messages or the configured error.
-func (m *MockProvider) GetCommitMessages(diff string, n int) ([]string, error) {
+// GenerateMessages returns the pre-seeded messages or the configured error.
+func (m *MockProvider) GenerateMessages(req providercore.CommitRequest) (providercore.CommitResponse, error) {
+	req.Normalize()
 	m.CallCount++
-	m.LastRequest.Diff = diff
-	// Mirror production providers: clamp requested count to available messages so
-	// tests observe the same effective completion count real callers would get.
-	effectiveN := max(min(n, len(m.Messages)), 0)
-	m.LastRequest.N = effectiveN
 
 	if m.Err != nil {
-		return nil, m.Err
+		return providercore.CommitResponse{}, m.Err
 	}
 
-	result := make([]string, effectiveN)
-	copy(result, m.Messages[:effectiveN])
-	return result, nil
+	effectiveN := max(min(req.Count, len(m.Messages)), 0)
+	req.Count = effectiveN
+	m.LastRequest = req
+	suggestions := make([]providercore.CommitSuggestion, 0, effectiveN)
+	for i := 0; i < effectiveN; i++ {
+		suggestions = append(suggestions, providercore.CommitSuggestion{Message: m.Messages[i]})
+	}
+
+	return providercore.CommitResponse{Suggestions: suggestions}, nil
 }
 
 // SupportsMultipleCompletions reports the mocked capability.
@@ -37,3 +40,17 @@ func (m *MockProvider) SupportsMultipleCompletions() bool {
 }
 
 var _ Provider = (*MockProvider)(nil)
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

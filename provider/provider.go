@@ -5,23 +5,24 @@ import (
 
 	"github.com/rezkam/gritty/provider/core"
 	// Ensure built-in providers register themselves.
+	_ "github.com/rezkam/gritty/claude"
 	_ "github.com/rezkam/gritty/openai"
 )
 
 type (
-	Provider           = core.Provider
-	ProviderDefinition = core.ProviderDefinition
-	ConfigSetter       = core.ConfigSetter
-	Factory            = core.Factory
+	Provider     = core.Provider
+	Definition   = core.ProviderDefinition
+	ConfigSetter = core.ConfigSetter
+	Factory      = core.Factory
 )
 
 // Register adds a provider definition to the available provider list.
-func Register(def ProviderDefinition) {
+func Register(def Definition) {
 	core.Register(def)
 }
 
 // AvailableProviders returns the registered provider definitions sorted by name.
-func AvailableProviders() []ProviderDefinition {
+func AvailableProviders() []Definition {
 	providers := core.Providers()
 	sort.Slice(providers, func(i, j int) bool {
 		return providers[i].Name < providers[j].Name
