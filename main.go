@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/rezkam/gritty/cmd"
-	_ "github.com/rezkam/gritty/openai"
+	_ "github.com/rezkam/gritty/provider"
 )
 
 func main() {
