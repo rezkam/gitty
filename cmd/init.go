@@ -2,16 +2,17 @@ package cmd
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/rezkam/gritty/provider"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+
+	"github.com/rezkam/gritty/provider"
+	providerconfig "github.com/rezkam/gritty/provider/config"
 )
 
 var initCmd = &cobra.Command{
@@ -25,29 +26,22 @@ func init() {
 }
 
 func runInitCmd(cmd *cobra.Command, args []string) error {
-	configPath := getConfigPath()
+	configPath, err := providerconfig.FilePath()
+	if err != nil {
+		return err
+	}
 	configDir := filepath.Dir(configPath)
 
-	viper.SetConfigFile(configPath)
-
-	// create the config directory if it doesn't exist
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(configDir, 0755); err != nil {
-			return fmt.Errorf("error creating config directory: %w", err)
-		}
+	if err := providerconfig.EnsureDir(configPath); err != nil {
+		return err
 	}
 
 	availableProviders := provider.AvailableProviders()
 
-	providerNames := make([]string, 0, len(availableProviders))
-	for _, p := range availableProviders {
-		providerNames = append(providerNames, p.Name)
-	}
-
 	// Display the available providers
 	fmt.Println("Select a commit message provider:")
-	for i, name := range providerNames {
-		fmt.Printf("%d: %s\n", i+1, name)
+	for i, p := range availableProviders {
+		fmt.Printf("%d: %s\n", i+1, p.Name)
 	}
 
 	// Prompt user to select a provider
@@ -64,15 +58,23 @@ func runInitCmd(cmd *cobra.Command, args []string) error {
 
 	// Convert the selection to an integer
 	selection, err := strconv.Atoi(selectionStr)
-	if err != nil || selection < 1 || selection > len(providerNames) {
-		return fmt.Errorf("invalid selection, please enter a number between 1 and %d", len(providerNames))
+	if err != nil || selection < 1 || selection > len(availableProviders) {
+		return fmt.Errorf("invalid selection, please enter a number between 1 and %d", len(availableProviders))
 	}
 
 	// Get the selected provider
-	selectedProvider := providerNames[selection-1]
+	selectedProvider := availableProviders[selection-1]
+
+	completionCount := 1
+	if selectedProvider.SupportsMultipleCompletions {
+		completionCount, err = promptCompletionCount(reader)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Get the selected provider's ConfigSetter
-	selectedProviderConfigSetter, err := provider.GetConfigSetter(selectedProvider)
+	selectedProviderConfigSetter, err := provider.GetConfigSetter(selectedProvider.Name)
 	if err != nil {
 		return fmt.Errorf("error getting provider config setter: %w", err)
 	}
@@ -82,34 +84,44 @@ func runInitCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error prompting for provider config: %w", err)
 	}
 
-	// save the configs
-	viper.Set("provider", selectedProvider)
-
-	// Save the entire configuration using reflection
-	viper.Set("config", cfg)
-
-	if err := viper.WriteConfig(); err != nil {
-		return fmt.Errorf("error saving configuration: %w", err)
+	// If the provider's config object knows how to provision on-disk template
+	// files, ask it to write those into the config directory so the generated
+	// config.yaml references editable template files.
+	type provisioner interface {
+		ProvisionFiles(configDir string) (map[string]string, error)
+	}
+	if p, ok := cfg.(provisioner); ok {
+		if _, err := p.ProvisionFiles(configDir); err != nil {
+			return fmt.Errorf("error provisioning provider files: %w", err)
+		}
 	}
 
-	// Change the file permissions to 0600 after writing the config
-	if err := os.Chmod(configPath, 0600); err != nil {
-		return fmt.Errorf("error setting file permissions: %w", err)
+	if err := providerconfig.Save(configPath, providerconfig.SettingsWrite{
+		Provider:    selectedProvider.Name,
+		Completions: completionCount,
+		Config:      cfg,
+	}); err != nil {
+		return err
 	}
 
 	fmt.Println("Provider configuration initialized successfully")
 	return nil
 }
 
-// structToMap converts a struct to a map[string]interface{} using reflection.
-func structToMap(input interface{}) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-	data, err := json.Marshal(input) // Convert struct to JSON
-	if err != nil {
-		return nil, fmt.Errorf("error marshalling struct: %w", err)
+func promptCompletionCount(reader *bufio.Reader) (int, error) {
+	fmt.Print("Enter desired number of suggestions per commit [1-5] (default 1): ")
+	input, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return 0, fmt.Errorf("error reading completion count: %w", err)
 	}
-	if err := json.Unmarshal(data, &result); err != nil { // Convert JSON to map
-		return nil, fmt.Errorf("error unmarshalling struct to map: %w", err)
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return 1, nil
 	}
-	return result, nil
+
+	count, err := strconv.Atoi(input)
+	if err != nil || count < 1 || count > 5 {
+		return 0, fmt.Errorf("invalid completion count: enter a number between 1 and 5")
+	}
+	return count, nil
 }

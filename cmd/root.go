@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
-	"path/filepath"
-)
 
-const grittyConfigFile = ".gritty/config.yaml"
+	"github.com/spf13/cobra"
+
+	providerconfig "github.com/rezkam/gritty/provider/config"
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "gritty",
@@ -29,20 +29,17 @@ func Execute() error {
 }
 
 func checkConfig(cmd *cobra.Command, args []string) error {
-	configPath := getConfigPath()
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+	configPath, err := providerconfig.FilePath()
+	if err != nil {
+		return fmt.Errorf("error resolving configuration path: %w", err)
+	}
+	exists, err := providerconfig.Exists(configPath)
+	if err != nil {
+		return fmt.Errorf("error checking configuration: %w", err)
+	}
+	if !exists {
 		fmt.Println("No configuration file found. Please run 'gritty init' to set up your configuration.")
 		os.Exit(1)
 	}
 	return nil
-}
-
-func getConfigPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("Error getting user home directory to read the configs:", err)
-		os.Exit(1)
-	}
-	return filepath.Join(home, grittyConfigFile)
-
 }
